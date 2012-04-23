@@ -17,7 +17,7 @@
          get_rules_fired/1, get_client_state/1,
          set_hooks/2, get_fired_rule/1,
          set_client_state/2, query_kb/2, serialize/1, 
-         remove_rule/2, retract/2]).
+         remove_rule/2, retract/2, retract_match/2]).
 
 %% gen_server callbacks
 -export([start_link/0, start_link/1, start_link/2, init/1, handle_call/3,
@@ -61,6 +61,9 @@ assert(Name, Facts) ->
 %% Condition is also deleted from the corresponding alpha-memory
 retract(Name, Facts) ->
     gen_server:call(Name, {retract, Facts}, infinity).
+
+retract_match(Name, Match) ->
+    gen_server:call(Name, {retract_match, Match}, infinity).
 
 add_rules(Name, RuleList)
   when is_list(RuleList) orelse is_atom(RuleList) ->
@@ -143,6 +146,15 @@ handle_call({retract, Facts}, _From, State0) ->
                 {{error, {Type, Reason}}, State0}
         end,
     {reply, Reply, State1};
+handle_call({retract_match, Pattern}, _From, State0) ->
+    Reply =
+        try
+            seresye_engine:retract_match(State0, Pattern)
+        catch
+            Type:Reason ->
+                {error, {Type, Reason}}
+        end,
+    {reply, Reply, State0};
 handle_call({add_rules, Rules}, _From, State0) ->
     {Reply, State1} =
         try

@@ -28,7 +28,7 @@
          set_hooks/2, get_fired_rule/1,
          add_rules/2, add_rule/2, add_rule/3, assert/2, get_kb/1,
          get_rules_fired/1, get_client_state/1, set_client_state/2,
-         query_kb/2, remove_rule/2, retract/2]).
+         query_kb/2, remove_rule/2, retract/2, retract_match/2]).
 
 %%====================================================================
 %% External functions
@@ -138,6 +138,10 @@ retract(EngineState = #seresye{kb=Kb, alfa=Alfa}, Fact) when is_tuple(Fact) ->
                         false -> EngineState
                     end).
 
+retract_match(EngineState0, Match) ->
+    lists:foldl(fun(Fact, EngineState1) ->
+                        retract(EngineState1, Fact)
+                end, EngineState0, query_kb(EngineState0, Match)).
 
 add_rules(EngineState0, RulesList) when is_list(RulesList) ->
     lists:foldl(fun(Rule, EngineState1) ->
