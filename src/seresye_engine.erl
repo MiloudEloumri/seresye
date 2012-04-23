@@ -24,11 +24,12 @@
 %% External exports
 %%====================================================================
 
--export([new/0, new/1, serialize/1, restore/1, cleanup/1,
-         add_hook/3, set_hooks/2, get_fired_rule/1,
-         add_rules/2, add_rule/2, add_rule/3, assert/2, get_kb/1,
-         get_rules_fired/1, get_client_state/1, set_client_state/2,
-         query_kb/2, remove_rule/2, retract/2, retract_match/2]).
+-export([new/0, new/1, serialize/1, restore/1, cleanup/1, add_hook/3,
+         set_hooks/2, get_fired_rule/1, add_rules/2, add_rule/2,
+         add_rule/3, assert/2, get_kb/1, get_rules_fired/1,
+         get_client_state/1, set_client_state/2, query_kb/2,
+         remove_rule/2, retract/2, retract_match/2,
+         retract_select/2]).
 
 %%====================================================================
 %% External functions
@@ -43,7 +44,7 @@ new(ClientState) ->
                                 client_state=ClientState}).
 
 add_hook(#seresye{hooks = Hooks} = EngineState, Hook, Fun) when is_atom(Hook),
-                                                                  is_function(Fun) ->
+                                                                is_function(Fun) ->
     L = proplists:get_value(Hook, Hooks, []),
     Hooks2 = lists:keystore(Hook, 1, Hooks, {Hook, [Fun | L]}),
     EngineState#seresye{ hooks = Hooks2 }.
@@ -144,10 +145,15 @@ retract(EngineState = #seresye{kb=Kb, alfa=Alfa}, Fact) when is_tuple(Fact) ->
                         false -> EngineState
                     end).
 
-retract_match(EngineState0, Match) ->
-    lists:foldl(fun(Fact, EngineState1) ->
-                        retract(EngineState1, Fact)
-                end, EngineState0, query_kb(EngineState0, Match)).
+retract_match(EngineState0, Pattern) ->
+    MS = [{Pattern, [], ['$_']}],
+    retract_select(EngineState0, MS).
+
+retract_select(EngineState0, MS) ->
+    Kb = get_kb(EngineState0),
+    MSC = ets:match_spec_compile(MS),
+    Facts = ets:match_spec_run(Kb, MSC),
+    retract(EngineState0, Facts).
 
 add_rules(EngineState0, RulesList) when is_list(RulesList) ->
     lists:foldl(fun(Rule, EngineState1) ->
@@ -782,10 +788,10 @@ check_cond(EngineState0, [{_C1, Tab, Alfa_fun} | T],
     case catch Alfa_fun(Fact) of
         true ->
             case Sign of
-                plus -> 
+                plus ->
                     ets:insert(Tab, Fact),
                     seresye_agenda:run_hook(EngineState0, after_assert, [Fact]);
-                minus -> 
+                minus ->
                     ets:delete_object(Tab, Fact)
             end,
             EngineState1 = pass_fact(EngineState0, Tab, {Fact, Sign}),
