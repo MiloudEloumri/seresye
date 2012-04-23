@@ -11,8 +11,15 @@
 
 -behaviour(application).
 
+%% API
+-export([start/0]).
+
 %% Application callbacks
 -export([start/2, stop/1]).
+
+start() ->
+    ok = application:start(erlware_commons),
+    ok = application:start(seresye).
 
 %%%===================================================================
 %%% Application callbacks
@@ -24,7 +31,7 @@ start(_StartType, _StartArgs) ->
             {ok, Pid};
         Error ->
             Error
-                end.
+    end.
 
 stop(_State) ->
     ok.

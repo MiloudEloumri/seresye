@@ -17,6 +17,7 @@
          get_number_of_activations/1, get_rules_fired/1,
          get_strategy/1, pop_rule/1,
          set_activation_salience/3, set_rule_salience/3,
+         run_hook/3,
          set_strategy/2]).
 
 -include("internal.hrl").
@@ -315,18 +316,17 @@ execute_rule(EngineState, {{M,F}, Args, X1, X2}) ->
     L = length(Args) + 1,
     execute_rule(EngineState, {fun M:F/L, Args, X1, X2});
 execute_rule(EngineState, {Fun, Args, _, _}) when is_function(Fun) ->
-    case proplists:get_value(before_rule, EngineState#seresye.hooks) of
-        BF when is_function(BF) ->
-            BF(EngineState, Fun, Args);
-        _ ->
-            ignore
-    end,
+    run_hook(EngineState, before_rule, [EngineState, Fun, Args]),
     Result = apply(Fun, [EngineState#seresye { fired_rule = {Fun, Args} } | Args]),
-    case proplists:get_value(after_rule, EngineState#seresye.hooks) of
-        AF when is_function(AF) ->
-            AF(Result, Fun, Args);
-        _ ->
-            ignore
-    end,
+    run_hook(EngineState, after_rule, [Result, Fun, Args]),
     Result#seresye{ fired_rule = undefined }.
 
+run_hook(EngineState, Name, Args) ->
+    case proplists:get_value(Name, EngineState#seresye.hooks) of
+        L when is_list(L) ->
+            [ apply(HF, Args) || HF <- L ];
+        HF when is_function(HF) ->
+            apply(HF, Args);
+        _ ->
+            ignore
+    end.

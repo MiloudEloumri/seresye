@@ -25,7 +25,7 @@
 %%====================================================================
 
 -export([new/0, new/1, serialize/1, restore/1, cleanup/1,
-         set_hooks/2, get_fired_rule/1,
+         add_hook/3, set_hooks/2, get_fired_rule/1,
          add_rules/2, add_rule/2, add_rule/3, assert/2, get_kb/1,
          get_rules_fired/1, get_client_state/1, set_client_state/2,
          query_kb/2, remove_rule/2, retract/2, retract_match/2]).
@@ -38,9 +38,15 @@ new() ->
 
 new(ClientState) ->
     seresye_agenda:new(#seresye{kb=[], alfa=[],
-                              join=seresye_tree_list:new(),
-                              pending_actions=[],
-                              client_state=ClientState}).
+                                join=seresye_tree_list:new(),
+                                pending_actions=[],
+                                client_state=ClientState}).
+
+add_hook(#seresye{hooks = Hooks} = EngineState, Hook, Fun) when is_atom(Hook),
+                                                                  is_function(Fun) ->
+    L = proplists:get_value(Hook, Hooks, []),
+    Hooks2 = lists:keystore(Hook, 1, Hooks, {Hook, [Fun | L]}),
+    EngineState#seresye{ hooks = Hooks2 }.
 
 set_hooks(EngineState, Hooks) when is_list(Hooks) ->
     EngineState#seresye{ hooks = Hooks }.
@@ -53,7 +59,7 @@ get_client_state(#seresye{client_state=State}) ->
 
 cleanup(#seresye{ alfa = Alfa0, join = Join0 }) ->
     [ begin (catch ets:delete(Tab)), Tab end || {_, Tab, _} <- Alfa0 ] ++
-    [ begin (catch ets:delete(Tab)), Tab end || {{Tab, _}, _, _, _, _} <- Join0, is_integer(Tab) ].         
+        [ begin (catch ets:delete(Tab)), Tab end || {{Tab, _}, _, _, _, _} <- Join0, is_integer(Tab) ].
 
 restore(#seresye{ alfa = Alfa0, join = Join0 } = Engine) ->
     TabCache = ets:new(tab_cache, []),
@@ -70,7 +76,7 @@ restore(#seresye{ alfa = Alfa0, join = Join0 } = Engine) ->
     Engine#seresye{ alfa = Alfa, join = Join }.
 
 serialize(#seresye{ alfa = Alfa0, join = Join0 } = Engine) ->
-    Alfa = [ {Cond, serialize_tab(Tab), Alfa_fun} 
+    Alfa = [ {Cond, serialize_tab(Tab), Alfa_fun}
              || {Cond, Tab, Alfa_fun} <- Alfa0 ],
     Join = [ {case Key of
                   {Tab,V} when is_integer(Tab) ->
@@ -80,8 +86,8 @@ serialize(#seresye{ alfa = Alfa0, join = Join0 } = Engine) ->
               end, Beta, Children, Parent, Pos} ||
                {Key, Beta, Children, Parent, Pos} <- Join0 ],
     Engine#seresye{ alfa = Alfa, join = Join }.
-                 
-% where
+
+                                                % where
 serialize_tab(Tab) ->
     case ets:info(Tab) of
         undefined ->
@@ -97,8 +103,8 @@ restore_tab(Cache, {ets_table, Tab, Info, Content}) ->
             NewTab = ets:new(proplists:get_value(name, Info),
                              [ proplists:get_value(Opt, Info) ||
                                  Opt <- [type,protection] ] ++
-                             [ {Opt, proplists:get_value(Opt, Info)} || 
-                                 Opt <- [keypos] ]),
+                                 [ {Opt, proplists:get_value(Opt, Info)} ||
+                                     Opt <- [keypos] ]),
             ets:insert(NewTab, Content),
             ets:insert(Cache, {Tab, NewTab}),
             NewTab
@@ -178,7 +184,7 @@ add_rule(EngineState0, {Module, Fun}, ClauseID, Salience) ->
                                   case X of
                                       {error, Msg} ->
                                           erlang:throw({seresye, {error_adding_rule,
-                                                         [Module, Fun, Msg]}});
+                                                                  [Module, Fun, Msg]}});
                                       {PConds, NConds} ->
                                           ?LOG(">> PConds=~p~n", [PConds]),
                                           ?LOG(">> NConds=~p~n", [NConds]),
@@ -246,21 +252,22 @@ add_rule__(EngineState0 = #seresye{join=Join},
             {EngineState1, Np_node} = make_struct(EngineState0, Rule, NConds, [],
                                                   Root, ng),
             Root1 = seresye_tree_list:refresh(Root,
-                                             EngineState1#seresye.join),
+                                              EngineState1#seresye.join),
             make_struct(EngineState1, Rule, PConds, [], Root1,
                         {Np_node, NConds})
     end.
 
 %% @doc initializes the memory with a new alpha-present the facts
 %% In the Knowledge Base that satisfy the condition Cond
-initialize_alfa(_, _, []) -> nil;
-initialize_alfa(Cond, Tab, [Fact | Other_fact]) ->
+initialize_alfa(_Engine, _, _, []) -> nil;
+initialize_alfa(Engine, Cond, Tab, [Fact | Other_fact]) ->
     Fun = prepare_match_alpha_fun(Cond),
     case Fun(Fact) of
         Fact ->
             ets:insert(Tab, Fact),
-            initialize_alfa(Cond, Tab, Other_fact);
-        false -> initialize_alfa(Cond, Tab, Other_fact)
+            seresye_agenda:run_hook(Engine, after_assert, [Fact]),
+            initialize_alfa(Engine, Cond, Tab, Other_fact);
+        false -> initialize_alfa(Engine, Cond, Tab, Other_fact)
     end.
 
 prepare_match_alpha_fun(Cond) ->
@@ -291,7 +298,7 @@ get_conds(FunName, ClauseID, AST) ->
     case search_fun(FunName, AST) of
         {error, Reason} ->
             erlang:throw({seresye, {error_parsing_forms,
-                                   FunName, Reason}});
+                                    FunName, Reason}});
         {ok, CL} ->
             if ClauseID > 0 ->
                     [read_clause(FunName, ClauseID,
@@ -375,7 +382,7 @@ read_clause(FunName, ClauseID, Clause, RecordList, AST) ->
 
 get_neg_conds(FunName0, ClauseID0, AST) ->
     lists:foldl(fun({attribute,_,rule_neg, {FunName1, ClauseID1, Detail}}, _)
-                   when ClauseID0 == ClauseID1, FunName0 == FunName1 ->
+                      when ClauseID0 == ClauseID1, FunName0 == FunName1 ->
                         neg_to_list(rewrite_negs(Detail), []);
                    (_, Acc) ->
                         Acc
@@ -443,7 +450,7 @@ extract_parameters([{record, _, RecordName, Condition}
                                                 RecordDefinition)]},
     extract_parameters(Tail, RecordList, [Pattern | Acc]);
 extract_parameters([{tuple, L, Elements}| Tail], RecordList, Acc) ->
-    Pattern = {tuple, L, 
+    Pattern = {tuple, L,
                extract_parameters(Elements, RecordList, [])},
     extract_parameters(Tail, RecordList, [Pattern | Acc]);
 extract_parameters([Condition | Tail], RecordList, Acc) ->
@@ -456,7 +463,7 @@ remove_line_numbers(Values) when is_list(Values) ->
 remove_line_numbers({op, _, Op, T1, T2}) ->
     {op, 0, Op, remove_line_numbers(T1), remove_line_numbers(T2)};
 remove_line_numbers({Type, L})
-    when is_integer(L), is_atom(Type) ->
+  when is_integer(L), is_atom(Type) ->
     {Type, 0};
 remove_line_numbers({string, _, String}) ->
     {string, 0, String};
@@ -518,7 +525,7 @@ make_struct(EngineState0 = #seresye{join=Join}, _Rule, [], _P, Cur_node, ng) ->
             false ->
                 Value = [],
                 {Node0, Join1} = seresye_tree_list:insert(Key, Value,
-                                                         Cur_node, Join),
+                                                          Cur_node, Join),
                 {Node0, update_new_node(EngineState0, Node0, Cur_node,
                                         Join1)};
             Node0 -> {Node0, {Join, EngineState0}}
@@ -531,7 +538,7 @@ make_struct(EngineState0 = #seresye{join=Join}, Rule, [], _P, Cur_node, nil) ->
                                 false ->
                                     Value = [],
                                     {Node, Join1} = seresye_tree_list:insert(Key, Value,
-                                                                            Cur_node, Join),
+                                                                             Cur_node, Join),
                                     update_new_node(EngineState0, Node, Cur_node,
                                                     Join1);
                                 Node ->
@@ -551,14 +558,14 @@ make_struct(EngineState0 = #seresye{join=Join}, Rule, [], P, Cur_node, {Nod, NCo
                                                       Cur_node),
     Nod1 = seresye_tree_list:refresh(Nod, Join1),
     Join2 = seresye_tree_list:set_child(Cur_node1, Nod1,
-                                       Join1),
+                                        Join1),
     Key = {p_node, Rule},
     {Join4, EngineState2} =
         case seresye_tree_list:child(Key, Cur_node1, Join2) of
             false ->
                 Value = [],
                 {Node, Join3} = seresye_tree_list:insert(Key, Value,
-                                                        Cur_node1, Join2),
+                                                         Cur_node1, Join2),
                 Cur_node2 = seresye_tree_list:refresh(Cur_node1, Join3),
                 update_new_node(EngineState1, Node, Cur_node2,
                                 Join3);
@@ -580,7 +587,7 @@ make_struct(EngineState0 = #seresye{join=Join}, Rule, [Cond | T], P, Cur_node, N
     make_struct(EngineState1#seresye{alfa=Alfa1, join=Join1}, Rule, T,
                 P1, Cur_node1, Nod).
 
-add_alfa(#seresye{kb=Kb, alfa=Alfa}, Cond) ->
+add_alfa(#seresye{kb=Kb, alfa=Alfa} = Engine, Cond) ->
     case is_present(Cond, Alfa) of
         false ->
             Tab = ets:new(alfa, [bag]),
@@ -590,7 +597,7 @@ add_alfa(#seresye{kb=Kb, alfa=Alfa}, Cond) ->
                        [Cond],[],[{atom,1,true}]}]}}],
             Alfa_fun = eval(Fun),
             Alfa1 = [{Cond, Tab, Alfa_fun} | Alfa],
-            initialize_alfa(Cond, Tab, Kb),
+            initialize_alfa(Engine, Cond, Tab, Kb),
             {Alfa1, {new, Tab}};
         {true, Tab} -> {Alfa, {old, Tab}}
     end.
@@ -602,7 +609,7 @@ remove_prod(EngineState0 = #seresye{join=Join}, Fun) ->
             Parent_node = seresye_tree_list:get_parent(Node, Join),
             Join1 = seresye_tree_list:remove_node(Node, Join),
             Parent_node1 = seresye_tree_list:refresh(Parent_node,
-                                                    Join1),
+                                                     Join1),
             EngineState1 = remove_nodes(Parent_node1,
                                         EngineState0#seresye{join=Join1}),
             remove_prod(EngineState1, Fun)
@@ -616,7 +623,7 @@ remove_nodes(Node, EngineState0 = #seresye{join=Join, alfa=Alfa}) ->
                     Parent_node = seresye_tree_list:get_parent(Node, Join),
                     Join1 = seresye_tree_list:remove_node(Node, Join),
                     Parent_node1 = seresye_tree_list:refresh(Parent_node,
-                                                            Join1),
+                                                             Join1),
                     {First, _} = seresye_tree_list:get_key(Node),
                     case First of
                         {n_node, IdNp_node} ->
@@ -624,14 +631,14 @@ remove_nodes(Node, EngineState0 = #seresye{join=Join, alfa=Alfa}) ->
                             %% delete all nodes of the conditions negated
                             Np_node = seresye_tree_list:get_node(IdNp_node, Join1),
                             Join2 = seresye_tree_list:remove_child(Node, Np_node,
-                                                                  Join1),
+                                                                   Join1),
                             Np_node1 = seresye_tree_list:refresh(Np_node, Join2),
                             EngineState1 = remove_nodes(Np_node1, EngineState0#seresye{join=Join2}),
                             %% Recovery of the parent node of the node passed as an argument n_node
                             %% The parent can now have a different id, but has the same key
                             Join3 = EngineState1#seresye.join,
                             Parent_node2 = seresye_tree_list:keysearch(ParentKey,
-                                                                      Join3),
+                                                                       Join3),
                             remove_nodes(Parent_node2, EngineState1);
                         np_node ->
                             remove_nodes(Parent_node1, EngineState0#seresye{join=Join1});
@@ -645,7 +652,7 @@ remove_nodes(Node, EngineState0 = #seresye{join=Join, alfa=Alfa}) ->
                                     end,
                             remove_nodes(Parent_node1,
                                          EngineState0#seresye{alfa=Alfa1,
-                                                             join=Join1})
+                                                              join=Join1})
                     end;
                 true -> EngineState0
             end;
@@ -674,22 +681,22 @@ eval(Expr) ->
 prepare_fun(_Cond, []) -> [{atom, 1, nil}];
 prepare_fun(Cond0, Cond1)
   when not is_list(Cond0), is_list(Cond1) ->
-       [{'fun',1,
-         {clauses,
-          [{clause,1,
-            [Cond0,
-             prepare_rest(Cond1)],
-            [],
-            [{atom,1,true}]}]}}];
+    [{'fun',1,
+      {clauses,
+       [{clause,1,
+         [Cond0,
+          prepare_rest(Cond1)],
+         [],
+         [{atom,1,true}]}]}}];
 prepare_fun(Cond0, Cond1)
   when is_list(Cond0), is_list(Cond1) ->
-       [{'fun',1,
-         {clauses,
-          [{clause,1,
-            [prepare_rest(Cond0),
-             prepare_rest(Cond1)],
-            [],
-            [{atom,1,true}]}]}}].
+    [{'fun',1,
+      {clauses,
+       [{clause,1,
+         [prepare_rest(Cond0),
+          prepare_rest(Cond1)],
+         [],
+         [{atom,1,true}]}]}}].
 
 prepare_rest([Element | Rest]) ->
     {cons, 1, Element, prepare_rest(Rest)};
@@ -755,11 +762,11 @@ signal(EngineState0 = #seresye{pending_actions=PAList}, Token, Sign, {Fun, Salie
             plus ->
                 fun(EngineState1) ->
                         seresye_agenda:add_activation(EngineState1, Fun,
-                                                     Token, Salience)
+                                                      Token, Salience)
                 end;
             minus ->
                 ActivationId = seresye_agenda:get_activation(EngineState0,
-                                                            {Fun, Token}),
+                                                             {Fun, Token}),
                 fun(EngineState1) ->
                         seresye_agenda:delete_activation(EngineState1, ActivationId)
                 end
@@ -775,8 +782,11 @@ check_cond(EngineState0, [{_C1, Tab, Alfa_fun} | T],
     case catch Alfa_fun(Fact) of
         true ->
             case Sign of
-                plus -> ets:insert(Tab, Fact);
-                minus -> ets:delete_object(Tab, Fact)
+                plus -> 
+                    ets:insert(Tab, Fact),
+                    seresye_agenda:run_hook(EngineState0, after_assert, [Fact]);
+                minus -> 
+                    ets:delete_object(Tab, Fact)
             end,
             EngineState1 = pass_fact(EngineState0, Tab, {Fact, Sign}),
             check_cond(EngineState1, T, {Fact, Sign});
@@ -805,7 +815,7 @@ propagate(EngineState0, [Join_node | T], {Fact, Sign}, Join) ->
                                 Sign, Join);
             {_Tab, _Fun} ->
                 Children_list = seresye_tree_list:children(Join_node1,
-                                                          Join),
+                                                           Join),
                 pass_tok(EngineState0, Tok_list, Children_list,
                          Join)
         end,
@@ -815,7 +825,7 @@ propagate_nnode(EngineState0, _Join_node, [], _, Join) ->
     {Join, EngineState0};
 propagate_nnode(EngineState0, Join_node, Tok_list, Sign, Join) ->
     Children_list = seresye_tree_list:children(Join_node,
-                                              Join),
+                                               Join),
     Toks = [make_toks(Tok, Sign) || Tok <- Tok_list],
     case Sign of
         plus -> pass_tok(EngineState0, Toks, Children_list, Join);
@@ -855,7 +865,7 @@ left_act(EngineState0, {Token, Sign}, [Join_node | T], Join) ->
             minus -> Beta -- [Token]
         end,
     Join1 = seresye_tree_list:update_beta(Beta1, Join_node,
-                                         Join),
+                                          Join),
     case seresye_tree_list:get_key(Join_node) of
         {p_node, Rule} ->
             left_act(signal(EngineState0, Token, Sign, Rule),
@@ -865,7 +875,7 @@ left_act(EngineState0, {Token, Sign}, [Join_node | T], Join) ->
                            [Join_node | T], Join1);
         {np_node, nil} ->
             Children_list = seresye_tree_list:children(Join_node,
-                                                      Join1),
+                                                       Join1),
             {Join2, EngineState1} = propagate(EngineState0, Children_list,
                                               {Token, Sign}, Join1),
             left_act(EngineState1, {Token, Sign}, T, Join2);
@@ -873,7 +883,7 @@ left_act(EngineState0, {Token, Sign}, [Join_node | T], Join) ->
             Alfa_mem = ets:tab2list(Tab),
             Tok_list = join_left({Token, Sign}, Alfa_mem, Join_fun),
             Children_list = seresye_tree_list:children(Join_node,
-                                                      Join1),
+                                                       Join1),
             {Join2, EngineState1} = pass_tok(EngineState0, Tok_list, Children_list,
                                              Join1),
             left_act(EngineState1, {Token, Sign}, T, Join2)
@@ -897,7 +907,7 @@ left_act_nnode(EngineState0, {Token, Sign}, IdNp_node, Join_fun,
     case Tok_list of
         [] ->
             Children_list = seresye_tree_list:children(Join_node,
-                                                      Join),
+                                                       Join),
             {Join1, EngineState1} = pass_tok(EngineState0, [{Token, Sign}],
                                              Children_list, Join),
             left_act(EngineState1, {Token, Sign}, T, Join1);
@@ -980,7 +990,7 @@ new_join(EngineState0, J, Tab, Join_fun, Parent_node) ->
     Key = {Tab, Join_fun},
     Value = [],
     {Node, J1} = seresye_tree_list:insert(Key, Value,
-                                         Parent_node, J),
+                                          Parent_node, J),
     {J2, EngineState1} = update_new_node(EngineState0, Node, Parent_node, J1),
     Node1 = seresye_tree_list:refresh(Node, J2),
     {Node1, J2, EngineState1}.

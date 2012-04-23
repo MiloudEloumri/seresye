@@ -15,7 +15,7 @@
 -export([start/0, start/1, start/2, stop/1, get_engine/1,
          add_rules/2, add_rule/2, add_rule/3, assert/2, get_kb/1,
          get_rules_fired/1, get_client_state/1,
-         set_hooks/2, get_fired_rule/1,
+         add_hook/3, set_hooks/2, get_fired_rule/1,
          set_client_state/2, query_kb/2, serialize/1, 
          remove_rule/2, retract/2, retract_match/2]).
 
@@ -37,6 +37,10 @@ start(Name, ClientState) ->
 
 set_hooks(Name, Hooks) when is_list(Hooks) ->
     gen_server:cast(Name, {set_hooks, Hooks}).
+
+add_hook(Name, Hook, Fun) when is_atom(Hook),
+                               is_function(Fun) ->
+    gen_server:call(Name, {add_hook, Hook, Fun}).
 
 set_client_state(Name, NewState) ->
     gen_server:cast(Name, {set_client_state, NewState}).
@@ -229,6 +233,9 @@ handle_call({query_kb, Pattern}, _From, State0) ->
                 {error, {Type, Reason}}
         end,
     {reply, Reply, State0};
+
+handle_call({add_hook, Hook, Fun}, _From, State) ->
+    {reply, ok, seresye_engine:add_hook(State, Hook, Fun)};
 
 handle_call(serialize, _From, State) ->
     Reply = seresye_engine:serialize(State),
