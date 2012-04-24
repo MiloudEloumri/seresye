@@ -792,7 +792,8 @@ check_cond(EngineState0, [{_C1, Tab, Alfa_fun} | T],
                     ets:insert(Tab, Fact),
                     seresye_agenda:run_hook(EngineState0, after_assert, [Fact]);
                 minus ->
-                    ets:delete_object(Tab, Fact)
+                    ets:delete_object(Tab, Fact),
+                    seresye_agenda:run_hook(EngineState0, after_retract, [Fact])
             end,
             EngineState1 = pass_fact(EngineState0, Tab, {Fact, Sign}),
             check_cond(EngineState1, T, {Fact, Sign});
