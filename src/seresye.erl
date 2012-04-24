@@ -154,23 +154,23 @@ handle_call({retract, Facts}, _From, State0) ->
         end,
     {reply, Reply, State1};
 handle_call({retract_match, Pattern}, _From, State0) ->
-    Reply =
+    {Reply, State} =
         try
-            seresye_engine:retract_match(State0, Pattern)
+            {ok, seresye_engine:retract_match(State0, Pattern)}
         catch
             Type:Reason ->
                 {error, {Type, Reason}}
         end,
-    {reply, Reply, State0};
+    {reply, Reply, State};
 handle_call({retract_select, MS}, _From, State0) ->
-    Reply =
+    {Reply, State} =
         try
-            seresye_engine:retract_select(State0, MS)
+            {ok, seresye_engine:retract_select(State0, MS)}
         catch
             Type:Reason ->
                 {error, {Type, Reason}}
         end,
-    {reply, Reply, State0};
+    {reply, Reply, State};
 handle_call({add_rules, Rules}, _From, State0) ->
     {Reply, State1} =
         try
