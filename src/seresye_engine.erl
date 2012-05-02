@@ -125,6 +125,7 @@ assert(EngineState = #seresye{kb=Kb, alfa=Alfa}, Fact) when is_tuple(Fact) ->
     execute_pending(case lists:member(Fact, Kb) of
                         false ->
                             Kb1 = [Fact | Kb],
+                            seresye_agenda:run_hook(EngineState, asserted, [Fact]),
                             check_cond(EngineState#seresye{kb=Kb1}, Alfa,
                                        {Fact, plus});
                         true -> EngineState
@@ -140,6 +141,7 @@ retract(EngineState = #seresye{kb=Kb, alfa=Alfa}, Fact) when is_tuple(Fact) ->
     execute_pending(case lists:member(Fact, Kb) of
                         true ->
                             Kb1 = Kb -- [Fact],
+                            seresye_agenda:run_hook(EngineState, retracted, [Fact]),
                             check_cond(EngineState#seresye{kb=Kb1}, Alfa,
                                        {Fact, minus});
                         false -> EngineState
@@ -271,7 +273,6 @@ initialize_alfa(Engine, Cond, Tab, [Fact | Other_fact]) ->
     case Fun(Fact) of
         Fact ->
             ets:insert(Tab, Fact),
-            seresye_agenda:run_hook(Engine, after_assert, [Fact]),
             initialize_alfa(Engine, Cond, Tab, Other_fact);
         false -> initialize_alfa(Engine, Cond, Tab, Other_fact)
     end.
@@ -789,11 +790,9 @@ check_cond(EngineState0, [{_C1, Tab, Alfa_fun} | T],
         true ->
             case Sign of
                 plus ->
-                    ets:insert(Tab, Fact),
-                    seresye_agenda:run_hook(EngineState0, after_assert, [Fact]);
+                    ets:insert(Tab, Fact);
                 minus ->
-                    ets:delete_object(Tab, Fact),
-                    seresye_agenda:run_hook(EngineState0, after_retract, [Fact])
+                    ets:delete_object(Tab, Fact)
             end,
             EngineState1 = pass_fact(EngineState0, Tab, {Fact, Sign}),
             check_cond(EngineState1, T, {Fact, Sign});
