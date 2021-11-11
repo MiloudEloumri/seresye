@@ -20,13 +20,13 @@ final_rule(Engine0, {is, started} = X)
     seresye_engine:assert (Engine1, {is, finished}).
 
 run_sieve() ->
-    Start = now(),
+    Start = erlang:timestamp(),
     Engine1 = seresye_engine:assert (seresye_engine:new(),
                              [{X} || X <- lists:seq (2, 200)]),
     Engine2 = seresye_engine:add_rule (Engine1, {?MODULE, remove_multiple}, 2),
     Engine3 = seresye_engine:add_rule (Engine2, {?MODULE, final_rule}, 1),
     Engine4 = seresye_engine:assert (Engine3, {is, started}),
-    End = now(),
+    End = erlang:timestamp(),
     io:format("Kb ~p~n", [seresye_engine:get_kb (Engine4)]),
     R = seresye_engine:get_rules_fired (Engine4),
     io:format ("Rules fired: ~p~n", [R]),
