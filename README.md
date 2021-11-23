@@ -1,8 +1,18 @@
-SERESYE
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![MIT License][license-shield]][license-url]
+[![DOCS][docs-shield]][docs-url]
+[![LinkedIn][linkedin-shield]][linkedin-url]
+***
+**SERESYE**
 =====
-
-SERESYE means Swarm oriented ERlang Expert SYstem Engine. It is a library to write expert systems and rule processing
-engines using the Erlang.
+SERESYE stands for Swarm oriented ERlang Expert SYstem Engine. It is a library to write expert systems and rule processing
+engines using Erlang.
+***
+SERESYE is built using [![Rebar3][rebar3-shield]][rebar3-url] on [![Erlang][erlang-shield]][erlang-url]
+***
 
 Build
 -----
@@ -10,7 +20,7 @@ Build
     $ rebar3 compile
     $ rebar3 shell
 
----
+***
 SERESYE - Swarm oriented ERlang Expert SYstem Engine
 ====================================================
 
@@ -43,7 +53,7 @@ To write an AI application with SERESYE the following steps have to be performed
 2. Identify the rules that you need and write them by using, e.g. first-order-logic predicates or even natural language;
 
 3. Implement the system by writing your rules as Erlang function clauses, according to the modality required by SERESYE.
-
+***
 The Application: the Domain of Relatives
 ----------------------------------------
 
@@ -135,7 +145,7 @@ The rule *mother* can be thus written as follows:
     %% if (X is female) and (X is Y's parent) then (X is Y's mother)
     %%
     mother (Engine, {female, X}, {parent, X, Y}) ->
-      seresye:assert (Engine, {mother, X, Y}).
+      seresye_srv:assert (Engine, {mother, X, Y}).
 
 #### Concept: father
 
@@ -145,7 +155,7 @@ This concept can be easily derived by means of the following rule:
     %% if (X is male) and (X is Y's parent) then (X is Y's father)
     %%
     father (Engine, {male, X}, {parent, X, Y}) ->
-      seresye:assert (Engine, {father, X, Y}).
+      seresye_srv:assert (Engine, {father, X, Y}).
 
 #### Concept: sister
 
@@ -161,7 +171,7 @@ The SERESYE rule used to map this concept is:
     %%    then (Z is Y's sister)
     %%
     sister (Engine, {parent, X, Y}, {parent, X, Z}, {female, Z}) when Y =/= Z ->
-      seresye:assert (Engine, {sister, Z, Y}).
+      seresye_srv:assert (Engine, {sister, Z, Y}).
 
 Please note the guard, which is needed to ensure that when Y and Z are bound to the same value, the rule is not
 activated (indeed this is possible since the same fact can match both the first and second
@@ -176,7 +186,7 @@ Given the previous one, this concept is now quite simple to implement:
     %%    then (Z is Y's brother)
     %%
     brother (Engine, {parent, X, Y}, {parent, X, Z}, {male, Z}) when Y =/= Z ->
-      seresye:assert (Engine, {brother, Z, Y}).
+      seresye_srv:assert (Engine, {brother, Z, Y}).
 
 #### Concepts: grandmother and grandfather
 
@@ -192,14 +202,14 @@ Both can be implemented using the following SERESYE rules:
     %%    then (X is Z's grandmother)
     %%
     grandmother (Engine, {mother, X, Y}, {parent, Y, Z}) ->
-      seresye:assert (Engine, {grandmother, X, Z}).
+      seresye_srv:assert (Engine, {grandmother, X, Z}).
 
     %%
     %% if (X is Y's father) and (Y is Z's parent)
     %%    then (X is Z's grandfather)
     %%
     grandfather (Engine, {father, X, Y}, {parent, Y, Z}) ->
-      seresye:assert (Engine, {grandfather, X, Z}).
+      seresye_srv:assert (Engine, {grandfather, X, Z}).
 
 Instantiating the Engine and Populating the Knowledge Base
 ----------------------------------------------------------
@@ -336,9 +346,9 @@ The final complete code of our AI application is thus the following:
 
 Now it's time to test our application. 
 Because we configured [rebar.config](https://github.com/MiloudEloumri/seresye/blob/master/rebar.config), 
-to run the /examples/... on test profile,
+to run the **/examples/...** on test profile,
 We can run: *rebar3 as test shell* 
-and start relatives engine using: *relatives:start().*
+and for example start relatives engine using: *relatives:start().*
 as follows:
 
     $ rebar3 as test shell
@@ -361,7 +371,6 @@ as follows:
     1> relatives:start().
     ok
     2>
-
 
 Following the call to function *relatives:start/0*, the engine is created and populated; if no errors occurred, the
 rules should have been processed and the new facts derived. To check this, we can use the function *seresye_srv:
@@ -425,7 +434,7 @@ select both Alice's and Anna's brothers, we can use the following function call:
     {brother,mark,alice}]
     5>
 
----
+***
 Running Examples and Eunit Tests
 -----------
 
@@ -454,9 +463,8 @@ To run all Eunit tests use:
 
     $ rebar3 eunit
 
-All Examples and Eunit tests are tested using,
-*rebar 3.17.0 on Erlang/OTP 23 Erts 11.0*
----
+All Examples and Eunit tests are currently tested using *rebar 3.17.0 on Erlang/OTP 23 Erts 11.0*
+***
 Conclusions
 -----------
 
@@ -465,3 +473,24 @@ of the Erlang language:
 the characteristics of functional and symbolic programming, together with the possibility of performing *introspection*
 of function declaration, can be successfully exploited for application domains which are completely new for Erlang but
 can surely be very interesting.
+
+<!-- MARKDOWN LINKS & IMAGES -->
+<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
+[contributors-shield]: https://img.shields.io/github/contributors/MiloudEloumri/seresye.svg?style=for-the-badge
+[contributors-url]: https://github.com/MiloudEloumri/seresye/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/MiloudEloumri/seresye.svg?style=for-the-badge
+[forks-url]: https://github.com/MiloudEloumri/seresye/network/members
+[stars-shield]: https://img.shields.io/github/stars/MiloudEloumri/seresye.svg?style=for-the-badge
+[stars-url]: https://github.com/MiloudEloumri/seresye/stargazers
+[issues-shield]: https://img.shields.io/github/issues/MiloudEloumri/seresye.svg?style=for-the-badge
+[issues-url]: https://github.com/MiloudEloumri/seresye/issues
+[license-shield]: https://img.shields.io/github/license/MiloudEloumri/seresye.svg?style=for-the-badge
+[license-url]: https://github.com/MiloudEloumri/seresye/blob/master/LICENSE.md
+[linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
+[linkedin-url]: https://www.linkedin.com/in/miloudeloumri/
+[rebar3-shield]: https://img.shields.io/badge/Rebar3-3.17.0-blue?labelColor=A90533&style=plastic
+[rebar3-url]: https://github.com/erlang/rebar3
+[erlang-shield]: https://img.shields.io/badge/Erlang|OTP_23-Erts_11.0-blue?labelColor=A90533&style=plastic&logo=Erlang
+[erlang-url]: http://www.erlang.org
+[docs-shield]: https://img.shields.io/static/v1?label=Docs&message=Read&&Color=8CA1AF&logo=Read-the-Docs&style=for-the-badge
+[docs-url]: https://github.com/MiloudEloumri/seresye/tree/master/doc
